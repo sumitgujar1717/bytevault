@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../auth/login_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -437,11 +439,9 @@ class ProfileScreen extends StatelessWidget {
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
-
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: AppColors.surface,
-
           title: const Text(
             'Log Out?',
             style: TextStyle(
@@ -449,37 +449,59 @@ class ProfileScreen extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-
           content: const Text(
             'Are you sure you want to log out of CodeSnippet Vault?',
             style: TextStyle(color: AppColors.textSecondary),
           ),
-
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
               },
-
               child: const Text('Cancel'),
             ),
 
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
+              onPressed: () async {
+                try {
+                  // Close the confirmation dialog.
+                  Navigator.pop(dialogContext);
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Logout will be connected to Firebase soon.'),
-                  ),
-                );
+                  // Sign out from Firebase.
+                  await FirebaseAuth.instance.signOut();
+
+                  if (!context.mounted) return;
+
+                  // Remove all previous screens and return to Login.
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
+                } on FirebaseAuthException catch (e) {
+                  if (!context.mounted) return;
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Logout failed: ${e.message ?? 'Please try again.'}',
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  if (!context.mounted) return;
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Something went wrong while logging out.'),
+                    ),
+                  );
+                }
               },
-
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.white,
               ),
-
               child: const Text('Log Out'),
             ),
           ],

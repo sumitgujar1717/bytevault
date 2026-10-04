@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "971185959586",
+    "project_id": "bytevault-6c905",
+    "storage_bucket": "bytevault-6c905.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:971185959586:android:52cb6361f76c571fa0ddfb",
+        "android_client_info": {
+          "package_name": "com.example.codevault"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwcUnAncbfHOlP8wE9xtKjq4OQTnZDqpw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
