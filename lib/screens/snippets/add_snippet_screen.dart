@@ -51,7 +51,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
     super.dispose();
   }
 
-  // Return the language identifier used by flutter_highlight.
   String get _highlightLanguage {
     switch (_selectedLanguage) {
       case 'Dart':
@@ -73,17 +72,24 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
     }
   }
 
+  // Validate the form and return the new snippet to the previous screen.
   void _saveSnippet() {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    // Firestore or another storage service is not connected here yet.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Form validated. Snippet storage is not connected yet.'),
-      ),
-    );
+    final snippet = <String, dynamic>{
+      'title': _titleController.text.trim(),
+      'language': _selectedLanguage,
+      'category': _selectedCategory,
+      'description': _descriptionController.text.trim(),
+      'code': _codeController.text.trim(),
+      'icon': Icons.code_rounded,
+      'favorite': false,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+
+    Navigator.pop(context, snippet);
   }
 
   @override
@@ -140,8 +146,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                       ),
                     ),
                     const SizedBox(height: 28),
-
-                    // Main form card.
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
@@ -159,7 +163,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Snippet title.
                           _buildLabel('Snippet Title', required: true),
                           const SizedBox(height: 8),
                           TextFormField(
@@ -177,8 +180,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                             },
                           ),
                           const SizedBox(height: 22),
-
-                          // Language and category dropdowns.
                           if (isDesktop)
                             Row(
                               children: [
@@ -193,8 +194,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                             _buildCategoryDropdown(),
                           ],
                           const SizedBox(height: 22),
-
-                          // Description.
                           _buildLabel('Description', required: true),
                           const SizedBox(height: 8),
                           TextFormField(
@@ -217,8 +216,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                             },
                           ),
                           const SizedBox(height: 22),
-
-                          // Code editor.
                           _buildLabel('Code', required: true),
                           const SizedBox(height: 8),
                           TextFormField(
@@ -227,9 +224,7 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                             minLines: 8,
                             keyboardType: TextInputType.multiline,
                             textAlignVertical: TextAlignVertical.top,
-                            onChanged: (_) {
-                              setState(() {});
-                            },
+                            onChanged: (_) => setState(() {}),
                             style: const TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 13,
@@ -259,14 +254,10 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                             },
                           ),
                           const SizedBox(height: 20),
-
-                          // Live syntax preview.
                           _buildLabel('Live Syntax Preview'),
                           const SizedBox(height: 8),
                           _buildSyntaxPreview(),
                           const SizedBox(height: 28),
-
-                          // Save button.
                           SizedBox(
                             width: double.infinity,
                             height: 54,
@@ -293,8 +284,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                       ),
                     ),
                     const SizedBox(height: 18),
-
-                    // Informational note.
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -312,9 +301,10 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Syntax highlighting is a live preview. '
-                              'Persistent snippet storage is not connected '
-                              'on this screen yet.',
+                              'Your code is highlighted live as you type. '
+                              'This version passes new snippets back to the '
+                              'list in memory; permanent storage is not '
+                              'connected yet.',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.4,
@@ -335,7 +325,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
     );
   }
 
-  // Display the highlighted code preview.
   Widget _buildSyntaxPreview() {
     final code = _codeController.text;
 
@@ -386,7 +375,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
     );
   }
 
-  // Reusable form label.
   Widget _buildLabel(String text, {bool required = false}) {
     return RichText(
       text: TextSpan(
@@ -407,7 +395,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
     );
   }
 
-  // Programming language dropdown.
   Widget _buildLanguageDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -427,7 +414,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
           }).toList(),
           onChanged: (value) {
             if (value == null) return;
-
             setState(() {
               _selectedLanguage = value;
             });
@@ -437,7 +423,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
     );
   }
 
-  // Snippet category dropdown.
   Widget _buildCategoryDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,7 +442,6 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
           }).toList(),
           onChanged: (value) {
             if (value == null) return;
-
             setState(() {
               _selectedCategory = value;
             });
