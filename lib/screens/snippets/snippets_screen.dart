@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'add_snippet_screen.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -246,7 +246,7 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
 
                     itemCount: _categories.length,
 
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
 
                     itemBuilder: (context, index) {
                       final category = _categories[index];
@@ -453,7 +453,7 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
                 const SizedBox(height: 5),
 
                 Text(
-                  '$language • $category',
+                  '$language â€¢ $category',
 
                   style: const TextStyle(
                     fontSize: 12,
@@ -554,3 +554,4 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
     );
   }
 }
+
