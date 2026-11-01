@@ -50,7 +50,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
             password: _passwordController.text,
           );
 
-      await credential.user?.updateDisplayName(_nameController.text.trim());
+      final user = credential.user;
+      if (user == null) {
+        throw StateError('Firebase did not return a signed-in user.');
+      }
+      await user.updateDisplayName(_nameController.text.trim());
 
       if (!mounted) return;
 

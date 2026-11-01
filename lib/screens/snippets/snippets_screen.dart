@@ -1,8 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import 'add_snippet_screen.dart';
 import 'snippet_details_screen.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/firestore_service.dart';
 
 class SnippetsScreen extends StatefulWidget {
   const SnippetsScreen({super.key});
@@ -26,125 +27,78 @@ class _SnippetsScreenState extends State<SnippetsScreen> {
     'Other',
   ];
 
-  // Demo snippets. New snippets are added to this list.
-  final List<Map<String, dynamic>> _snippets = [
-    {
-      'title': 'Java HashMap',
-      'language': 'Java',
-      'category': 'Java',
-      'description': 'Working with HashMap collections in Java.',
-      'icon': Icons.data_object_rounded,
-      'favorite': true,
-      'code': '''import java.util.HashMap;
-
-public class Main {
-  public static void main(String[] args) {
-    HashMap<String, Integer> scores = new HashMap<>();
-    scores.put("Alex", 95);
-    System.out.println(scores.get("Alex"));
-  }
-}''',
-    },
-    {
-      'title': 'Flutter Login UI',
-      'language': 'Dart',
-      'category': 'Flutter',
-      'description': 'Reusable Flutter login screen with form validation.',
-      'icon': Icons.phone_android_rounded,
-      'favorite': false,
-      'code': '''import 'package:flutter/material.dart';
-
-class LoginScreen extends StatelessWidget {
-  const LoginScreen({super.key});
+  final List<Map<String, dynamic>> _snippets = [];
+  bool _isLoading = true;
+  String? _loadError;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
-      body: const Padding(
-        padding: EdgeInsets.all(24),
-        child: TextField(
-          decoration: InputDecoration(
-            labelText: 'Email',
-            border: OutlineInputBorder(),
-          ),
-        ),
-      ),
-    );
+  void initState() {
+    super.initState();
+    _loadSnippets();
   }
-}''',
-    },
-    {
-      'title': 'Python API Request',
-      'language': 'Python',
-      'category': 'Python',
-      'description': 'Make a GET request using Python HTTP libraries.',
-      'icon': Icons.api_rounded,
-      'favorite': true,
-      'code': '''import urllib.request
-import json
 
-url = "https://jsonplaceholder.typicode.com/todos/1"
+  Future<void> _loadSnippets() async {
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      final rawSnippets = await FirestoreService.getMySnippets();
+      final favoriteIds = await FirestoreService.getFavoriteIds();
+      if (!mounted) return;
+      setState(() {
+        _snippets
+          ..clear()
+          ..addAll(rawSnippets.map((snippet) => _toDisplaySnippet(
+            snippet,
+            favorite: favoriteIds.contains(snippet['id']?.toString()),
+          )));
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error.toString();
+        _isLoading = false;
+      });
+    }
+  }
 
-with urllib.request.urlopen(url) as response:
-    data = json.loads(response.read().decode())
+  Map<String, dynamic> _toDisplaySnippet(
+    Map<String, dynamic> snippet, {
+    bool favorite = false,
+  }) {
+    final tags = (snippet['tags'] as List<dynamic>? ?? const [])
+        .map((tag) => tag.toString())
+        .toList();
+    final language = snippet['language']?.toString() ?? 'Other';
+    return {
+      ...snippet,
+      'language': language,
+      'category': tags.isEmpty ? 'Other' : tags.first,
+      'description': snippet['description']?.toString() ?? '',
+      'code': snippet['code']?.toString() ?? '',
+      'icon': _iconForLanguage(language),
+      'favorite': favorite,
+    };
+  }
 
-print(data)''',
-    },
-    {
-      'title': 'React Component',
-      'language': 'JavaScript',
-      'category': 'JavaScript',
-      'description': 'Basic reusable React functional component.',
-      'icon': Icons.web_rounded,
-      'favorite': false,
-      'code': '''import React from "react";
-
-function Welcome() {
-  return (
-    <div>
-      <h1>Hello, world!</h1>
-      <p>Welcome to my app.</p>
-    </div>
-  );
-}
-
-export default Welcome;''',
-    },
-    {
-      'title': 'Flutter Navigation',
-      'language': 'Dart',
-      'category': 'Flutter',
-      'description': 'Navigate between screens using Flutter routes.',
-      'icon': Icons.navigation_rounded,
-      'favorite': false,
-      'code': '''Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (context) => const DetailsScreen(),
-  ),
-);''',
-    },
-    {
-      'title': 'Dart Async Function',
-      'language': 'Dart',
-      'category': 'Dart',
-      'description': 'Simple async and await example in Dart.',
-      'icon': Icons.bolt_rounded,
-      'favorite': false,
-      'code': '''Future<String> fetchMessage() async {
-  await Future.delayed(
-    const Duration(seconds: 1),
-  );
-  return 'Hello from async Dart!';
-}
-
-void main() async {
-  final message = await fetchMessage();
-  print(message);
-}''',
-    },
-  ];
+  IconData _iconForLanguage(String language) {
+    switch (language.toLowerCase()) {
+      case 'dart':
+      case 'flutter':
+        return Icons.phone_android_rounded;
+      case 'java':
+      case 'kotlin':
+        return Icons.data_object_rounded;
+      case 'python':
+        return Icons.bolt_rounded;
+      case 'javascript':
+        return Icons.web_rounded;
+      default:
+        return Icons.code_rounded;
+    }
+  }
 
   @override
   void dispose() {
@@ -156,9 +110,13 @@ void main() async {
     final query = _searchController.text.trim().toLowerCase();
 
     return _snippets.where((snippet) {
+      final tags = (snippet['tags'] as List<dynamic>? ?? const [])
+          .map((tag) => tag.toString());
       final matchesCategory =
           _selectedCategory == 'All' ||
-          snippet['category'] == _selectedCategory;
+          snippet['category'] == _selectedCategory ||
+          snippet['language'] == _selectedCategory ||
+          tags.contains(_selectedCategory);
 
       final matchesSearch =
           query.isEmpty ||
@@ -172,7 +130,6 @@ void main() async {
     }).toList();
   }
 
-  // Receive the snippet returned by AddSnippetScreen.
   Future<void> _openAddSnippet() async {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -180,50 +137,53 @@ void main() async {
         builder: (_) => const AddSnippetScreen(),
       ),
     );
-
     if (!mounted || result == null) return;
-
-    final newSnippet = <String, dynamic>{
-      ...result,
-      'icon': Icons.code_rounded,
-      'favorite': false,
-    };
-
-    setState(() {
-      _snippets.insert(0, newSnippet);
-      _selectedCategory = 'All';
-      _searchController.clear();
-    });
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('Snippet added successfully!'),
-          duration: Duration(seconds: 2),
-        ),
+    try {
+      final saved = await FirestoreService.createSnippet(
+        title: result['title'] as String,
+        code: result['code'] as String,
+        language: result['language'] as String,
+        description: result['description'] as String,
+        tags: [result['category'] as String],
       );
+      if (!mounted) return;
+      setState(() {
+        _snippets.insert(0, _toDisplaySnippet(saved));
+        _selectedCategory = 'All';
+        _searchController.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Snippet saved to your ByteVault account.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save snippet: $error')),
+      );
+    }
   }
 
-  void _toggleFavorite(int index) {
+  Future<void> _toggleFavorite(int index) async {
     if (index < 0 || index >= _snippets.length) return;
-
-    setState(() {
-      _snippets[index]['favorite'] = !(_snippets[index]['favorite'] as bool);
-    });
-
-    final isFavorite = _snippets[index]['favorite'] as bool;
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
+    final snippet = _snippets[index];
+    final id = snippet['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final wasFavorite = snippet['favorite'] as bool? ?? false;
+    try {
+      await FirestoreService.setFavorite(id, !wasFavorite);
+      if (!mounted) return;
+      setState(() => snippet['favorite'] = !wasFavorite);
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            isFavorite ? 'Added to favorites' : 'Removed from favorites',
-          ),
-          duration: const Duration(seconds: 1),
+          content: Text(wasFavorite ? 'Removed from favorites' : 'Added to favorites'),
         ),
       );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update favorite: $error')),
+      );
+    }
   }
 
   void _openSnippetDetails(Map<String, dynamic> snippet) {
@@ -398,9 +358,32 @@ void main() async {
 
                 // Snippet list
                 Expanded(
-                  child: snippets.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.builder(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _loadError != null
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Could not load snippets: $_loadError',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    OutlinedButton.icon(
+                                      onPressed: _loadSnippets,
+                                      icon: const Icon(Icons.refresh_rounded),
+                                      label: const Text('Try again'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : snippets.isEmpty
+                              ? _buildEmptyState()
+                              : ListView.builder(
                           padding: EdgeInsets.fromLTRB(
                             isDesktop ? 32 : 20,
                             0,

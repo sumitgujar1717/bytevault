@@ -1,14 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../core/services/firestore_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../auth/login_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  Future<void> _editName() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final controller = TextEditingController(text: user.displayName ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit name'),
+        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+    await user.updateDisplayName(name);
+    await user.reload();
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final name = user?.displayName?.trim();
+    final displayName = name != null && name.isNotEmpty
+        ? name
+        : (user?.email?.split('@').first ?? 'ByteVault User');
+
     return Scaffold(
       backgroundColor: AppColors.background,
 
@@ -67,8 +101,8 @@ class ProfileScreen extends StatelessWidget {
 
                     const SizedBox(height: 16),
 
-                    const Text(
-                      'Shrey',
+                    Text(
+                      displayName,
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
@@ -78,8 +112,8 @@ class ProfileScreen extends StatelessWidget {
 
                     const SizedBox(height: 5),
 
-                    const Text(
-                      'shrey@example.com',
+                    Text(
+                      user?.email ?? '',
                       style: TextStyle(
                         fontSize: 14,
                         color: AppColors.textSecondary,
@@ -90,15 +124,7 @@ class ProfileScreen extends StatelessWidget {
 
                     // Edit profile
                     OutlinedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Edit Profile will be available soon.',
-                            ),
-                          ),
-                        );
-                      },
+                      onPressed: _editName,
 
                       icon: const Icon(Icons.edit_outlined, size: 18),
 
@@ -123,36 +149,23 @@ class ProfileScreen extends StatelessWidget {
               // ==========================================
               // STATISTICS
               // ==========================================
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      icon: Icons.code_rounded,
-                      value: '24',
-                      label: 'Snippets',
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  Expanded(
-                    child: _buildStatCard(
-                      icon: Icons.star_rounded,
-                      value: '8',
-                      label: 'Favorites',
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  Expanded(
-                    child: _buildStatCard(
-                      icon: Icons.folder_outlined,
-                      value: '6',
-                      label: 'Categories',
-                    ),
-                  ),
-                ],
+              FutureBuilder<Map<String, dynamic>>(
+                future: FirestoreService.getDashboardStats(),
+                builder: (context, snapshot) {
+                  final stats = snapshot.data ?? const <String, dynamic>{};
+                  final waiting = snapshot.connectionState == ConnectionState.waiting;
+                  final failed = snapshot.hasError;
+                  String value(String key) => waiting ? '…' : failed ? '—' : '${stats[key] ?? 0}';
+                  return Row(
+                    children: [
+                      Expanded(child: _buildStatCard(icon: Icons.code_rounded, value: value('snippetCount'), label: 'Snippets')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildStatCard(icon: Icons.star_rounded, value: value('favoriteCount'), label: 'Favorites')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _buildStatCard(icon: Icons.folder_outlined, value: value('categoryCount'), label: 'Categories')),
+                    ],
+                  );
+                },
               ),
 
               const SizedBox(height: 24),

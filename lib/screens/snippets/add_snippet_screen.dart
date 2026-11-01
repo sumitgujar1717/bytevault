@@ -302,9 +302,8 @@ class _AddSnippetScreenState extends State<AddSnippetScreen> {
                           Expanded(
                             child: Text(
                               'Your code is highlighted live as you type. '
-                              'This version passes new snippets back to the '
-                              'list in memory; permanent storage is not '
-                              'connected yet.',
+                              'Saved snippets are stored in your private '
+                              'ByteVault account.',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.4,

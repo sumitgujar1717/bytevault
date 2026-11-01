@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../snippets/snippets_screen.dart';
 import '../../core/theme/app_colors.dart';
 import '../snippets/add_snippet_screen.dart';
 import '../profiles/profile_screen.dart';
+import '../../core/services/firestore_service.dart';
+import '../snippets/snippet_details_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -14,67 +17,160 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  List<Map<String, dynamic>> _allSnippets = [];
+  List<Map<String, dynamic>> _recentSnippets = [];
+  List<Map<String, dynamic>> _favoriteSnippets = [];
+  Map<String, dynamic> _stats = {};
+  bool _isLoading = true;
+  String? _loadError;
 
-  // Sample dashboard data.
-  // Favorites are currently stored in memory only.
-  final List<Map<String, dynamic>> _recentSnippets = [
-    {
-      'title': 'Java HashMap',
-      'language': 'Java',
-      'category': 'Collections',
-      'icon': Icons.data_object_rounded,
-      'favorite': false,
-    },
-    {
-      'title': 'Flutter Login UI',
-      'language': 'Dart',
-      'category': 'Authentication',
-      'icon': Icons.phone_android_rounded,
-      'favorite': false,
-    },
-    {
-      'title': 'Python API Request',
-      'language': 'Python',
-      'category': 'API',
-      'icon': Icons.api_rounded,
-      'favorite': false,
-    },
-    {
-      'title': 'React Component',
-      'language': 'JavaScript',
-      'category': 'Frontend',
-      'icon': Icons.web_rounded,
-      'favorite': false,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboard();
+  }
 
-  // Toggle the favorite state and immediately rebuild the UI.
-  void _toggleFavorite(int index) {
-    if (index < 0 || index >= _recentSnippets.length) {
-      return;
+  Future<void> _loadDashboard({bool showLoading = true}) async {
+    if (showLoading && mounted) {
+      setState(() {
+        _isLoading = true;
+        _loadError = null;
+      });
     }
+    try {
+      final rawSnippets = await FirestoreService.getMySnippets();
+      final rawFavorites = await FirestoreService.getFavorites();
+      final stats = await FirestoreService.getDashboardStats();
+      final favoriteIds = rawFavorites
+          .map((item) => item['id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      final allSnippets = rawSnippets
+          .map((item) => _toDisplaySnippet(
+                item,
+                favorite: favoriteIds.contains(item['id']?.toString()),
+              ))
+          .toList();
+      final favorites = rawFavorites
+          .map((item) => _toDisplaySnippet(item, favorite: true))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _allSnippets = allSnippets;
+        _recentSnippets = allSnippets.take(4).toList();
+        _favoriteSnippets = favorites;
+        _stats = stats;
+        _isLoading = false;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = error.toString();
+      });
+    }
+  }
 
-    late bool isFavorite;
+  Map<String, dynamic> _toDisplaySnippet(
+    Map<String, dynamic> snippet, {
+    bool favorite = false,
+  }) {
+    final tags = (snippet['tags'] as List<dynamic>? ?? const [])
+        .map((tag) => tag.toString())
+        .toList();
+    final language = snippet['language']?.toString() ?? 'Other';
+    return {
+      ...snippet,
+      'language': language,
+      'category': tags.isEmpty ? 'Other' : tags.first,
+      'icon': _languageIcon(language),
+      'favorite': favorite,
+    };
+  }
 
-    setState(() {
-      final currentValue = _recentSnippets[index]['favorite'] as bool? ?? false;
+  IconData _languageIcon(String language) {
+    switch (language.toLowerCase()) {
+      case 'dart':
+      case 'flutter':
+        return Icons.phone_android_rounded;
+      case 'java':
+      case 'kotlin':
+        return Icons.data_object_rounded;
+      case 'python':
+        return Icons.bolt_rounded;
+      case 'javascript':
+        return Icons.web_rounded;
+      default:
+        return Icons.code_rounded;
+    }
+  }
 
-      isFavorite = !currentValue;
-      _recentSnippets[index]['favorite'] = isFavorite;
-    });
+  String get _displayName {
+    final user = FirebaseAuth.instance.currentUser;
+    final name = user?.displayName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final email = user?.email;
+    if (email != null && email.contains('@')) return email.split('@').first;
+    return 'there';
+  }
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
+  int get _categoryCount => _allSnippets
+      .map((item) => item['category']?.toString())
+      .where((category) => category != null && category.isNotEmpty)
+      .toSet()
+      .length;
+
+  Future<void> _toggleFavorite(int index) async {
+    if (index < 0 || index >= _recentSnippets.length) return;
+    final snippet = _recentSnippets[index];
+    final id = snippet['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final wasFavorite = snippet['favorite'] as bool? ?? false;
+    try {
+      await FirestoreService.setFavorite(id, !wasFavorite);
+      await _loadDashboard(showLoading: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            isFavorite
-                ? '${_recentSnippets[index]['title']} added to favorites.'
-                : '${_recentSnippets[index]['title']} removed from favorites.',
-          ),
-          duration: const Duration(seconds: 1),
+          content: Text(wasFavorite ? 'Removed from favorites.' : 'Added to favorites.'),
         ),
       );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update favorite: $error')),
+      );
+    }
+  }
+
+  Future<void> _openAddSnippet() async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute<Map<String, dynamic>>(
+        builder: (_) => const AddSnippetScreen(),
+      ),
+    );
+    if (!mounted || result == null) return;
+    try {
+      await FirestoreService.createSnippet(
+        title: result['title'] as String,
+        code: result['code'] as String,
+        language: result['language'] as String,
+        description: result['description'] as String,
+        tags: [result['category'] as String],
+      );
+      await _loadDashboard(showLoading: false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Snippet saved to your account.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save snippet: $error')),
+      );
+    }
   }
 
   void _onNavigationTap(int index) {
@@ -91,22 +187,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           setState(() {
             _selectedIndex = 0;
           });
+          _loadDashboard(showLoading: false);
         }
       });
       return;
     }
 
     if (index == 2) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const AddSnippetScreen()),
-      ).then((_) {
-        if (mounted) {
-          setState(() {
-            _selectedIndex = 0;
-          });
-        }
-      });
+      _openAddSnippet();
       return;
     }
 
@@ -130,11 +218,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // Display favorited dashboard snippets.
+  // Display the signed-in user's favorites returned by the backend.
   void _showFavorites() {
-    final favorites = _recentSnippets
-        .where((snippet) => snippet['favorite'] == true)
-        .toList();
+    final favorites = _favoriteSnippets;
 
     showModalBottomSheet<void>(
       context: context,
@@ -220,14 +306,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                   trailing: IconButton(
                                     tooltip: 'Remove from favorites',
-                                    onPressed: () {
-                                      final originalIndex = _recentSnippets
-                                          .indexOf(snippet);
-
+                                    onPressed: () async {
+                                      final messenger = ScaffoldMessenger.of(context);
+                                      final id = snippet['id']?.toString();
                                       Navigator.pop(sheetContext);
-
-                                      if (originalIndex >= 0) {
-                                        _toggleFavorite(originalIndex);
+                                      if (id == null || id.isEmpty) return;
+                                      try {
+                                        await FirestoreService.setFavorite(id, false);
+                                        await _loadDashboard(showLoading: false);
+                                      } catch (error) {
+                                        if (!mounted) return;
+                                        messenger.showSnackBar(
+                                          SnackBar(content: Text('Could not remove favorite: $error')),
+                                        );
                                       }
                                     },
                                     icon: const Icon(
@@ -345,8 +436,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Good evening, Shrey 👋',
+                        Text(
+                          'Good evening, $_displayName 👋',
                           style: TextStyle(
                             fontSize: 29,
                             fontWeight: FontWeight.w700,
@@ -409,18 +500,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     delegate: SliverChildListDelegate([
                       _buildStatCard(
                         icon: Icons.code_rounded,
-                        value: '24',
+                        value: _isLoading
+                            ? '…'
+                            : '${_stats['snippetCount'] ?? _allSnippets.length}',
                         label: 'My Snippets',
                       ),
                       _buildStatCard(
                         icon: Icons.star_rounded,
-                        value:
-                            '${_recentSnippets.where((s) => s['favorite'] == true).length}',
+                        value: _isLoading
+                            ? '…'
+                            : '${_stats['favoriteCount'] ?? _favoriteSnippets.length}',
                         label: 'Favorites',
                       ),
                       _buildStatCard(
                         icon: Icons.folder_outlined,
-                        value: '6',
+                        value: _isLoading ? '…' : '$_categoryCount',
                         label: 'Categories',
                       ),
                     ]),
@@ -479,19 +573,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     120,
                   ),
                   sliver: SliverList.builder(
-                    itemCount: _recentSnippets.length,
+                    itemCount: _recentSnippets.isEmpty ? 1 : _recentSnippets.length,
                     itemBuilder: (context, index) {
+                      if (_recentSnippets.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Text(
+                            _isLoading
+                                ? 'Loading your snippets…'
+                                : _loadError ?? 'No snippets yet. Add your first one.',
+                            style: const TextStyle(color: AppColors.textSecondary),
+                          ),
+                        );
+                      }
                       final snippet = _recentSnippets[index];
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildSnippetCard(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => _openSnippetDetails(snippet),
+                          child: _buildSnippetCard(
                           title: snippet['title'] as String,
                           language: snippet['language'] as String,
                           category: snippet['category'] as String,
                           icon: snippet['icon'] as IconData,
                           favorite: snippet['favorite'] as bool? ?? false,
                           onFavorite: () => _toggleFavorite(index),
+                          ),
                         ),
                       );
                     },
@@ -653,6 +762,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _openSnippetDetails(Map<String, dynamic> snippet) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SnippetDetailsScreen(
+          title: snippet['title']?.toString() ?? 'Untitled',
+          language: snippet['language']?.toString() ?? 'Other',
+          category: snippet['category']?.toString() ?? 'Other',
+          description: snippet['description']?.toString() ?? '',
+          code: snippet['code']?.toString() ?? '',
+        ),
       ),
     );
   }

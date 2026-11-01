@@ -43,10 +43,14 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
+      final user = credential.user;
+      if (user == null) {
+        throw StateError('Firebase did not return a signed-in user.');
+      }
 
       if (!mounted) return;
 
@@ -107,11 +111,13 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
+      debugPrint('Login flow failed: $e');
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Something went wrong. Please try again.'),
+        SnackBar(
+          content: Text('Unable to complete sign-in. Details: $e'),
+          duration: const Duration(seconds: 8),
         ),
       );
     } finally {
